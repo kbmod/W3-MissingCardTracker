@@ -58,17 +58,20 @@ class CMissingCardTracker {
 
     private function ExtractCardData() : array<SCardSourceData> {
         var cards : array<SCardSourceData>;
+        var card : SCardSourceData;
         var sourceCSV : C2dArray;
         var cardAmount, i : int;
 
         sourceCSV = LoadCSV("gameplay\globals\card_sources.csv");
 
         cardAmount = sourceCSV.GetNumRows();
-        cards.Resize(cardAmount);
-
         for (i = 0; i < cardAmount; i += 1) {
-            cards[i].cardName = sourceCSV.GetValueAsName("CardName", i);
-            cards[i].originArea = sourceCSV.GetValue("OriginArea", i);
+            card.cardName = sourceCSV.GetValueAsName("CardName", i);
+            // Source tables can retain removed items (e.g. Poor Infantry 2/3).
+            // Query the active definitions so restored cards still work with mods.
+            if (!theGame.GetDefinitionsManager().ItemHasTag(card.cardName, 'GwintCard')) continue;
+            card.originArea = sourceCSV.GetValue("OriginArea", i);
+            cards.PushBack(card);
         }
 
         return cards;
@@ -100,12 +103,16 @@ class CMissingCardTracker {
         for (i = 0; i < locations.Size(); i += 1) {
             // handle locations with random cards
             query = locations[i].query;
-            if (randomRemaining && query[0] != "") {
+            if (randomRemaining && query.Size() > 0) {
                 for (j = 0; j < query.Size(); j += 1) {
-                    if (FactsQuerySum(query[j]) == 0) {
-                        locationsRemaining.PushBack(locations[i]);
+                    // Multiple facts identify alternative versions of one opponent.
+                    // Claiming a card from either version completes this location.
+                    if (FactsQuerySum(query[j]) > 0) {
                         break;
                     }
+                }
+                if (j == query.Size()) {
+                    locationsRemaining.PushBack(locations[i]);
                 }
             } else {
                 // loop through all cards
